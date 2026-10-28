@@ -1,0 +1,17 @@
+Для sequence
+6.8 kDa mitochondrial proteolipid	Homo sapiens (Human)	MLQSIIKNIWIPMKPYYTKVYQEIWIGMGLMGFIVYKIRAADKRSKALKASAPAPGHH
+Pre-T/NK cell associated protein 6H9A	Homo sapiens (Human)	MRLSCLVIITITAELCVPLMLCAHGEQAQLPRGVCVLGTGTSPAWSPVLLGRLPFPH
+Alcohol dehydrogenase	Brachydanio rerio	MDTTGKVIKCKAAVAWEAGKPLTIEEVEVAPPKAHEVRVKIHATGVCHTDAYTLSGSDPEGLFPVILGHEGAGTVESVGEGVTK
+RNA-dependent RNA polymerase [Fragment]	San Miguel sea lion virus	PSGMPLTSIINSLNHCLMVGCAVVKALEDSGVQATWNIFDSMDLFTYGDDGVYIVPPLISSVMPKVFSNLRQFGLKPTRTDKTDAEITPIPADEPVEFLKRTIVRTENGIRALLDKSSII
+Cecropin	Bombyx mori (Silk moth)	RWKIFKKIEKVGQNIRDGIVKAGPAVAVVGQAATI
+
+
+Для commands
+search	SIIK
+search	PLML
+search	FK3I
+diff	6.8 kDa mitochondrial proteolipid	Alcohol dehydrogenase
+diff	RNA-dependent RNA polymerase [Fragment]	Alcohol dehydrogenase
+diff	Cecropin	Pre-T/NK cell associated protein 6H9A
+mode	Cecropin
+mode	Alcohol dehydrogenase
