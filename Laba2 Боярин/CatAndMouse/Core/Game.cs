@@ -1,187 +1,165 @@
-﻿using System.Globalization;
-using System.Text;
-
-namespace CatAndMouse;
-public sealed class Game
+namespace CatAndMouse
 {
-    public const int MaxFieldSize = 10_000;
-
-    public static string InputFile = "ChaseData.txt";
-    public static string OutFile = "PursuitLog.txt";
-
-    private const string MouseCommand = "M";
-    private const string CatCommand = "C";
-    private const string PrintCommand = "P";
-
-    private static readonly Encoding OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-
-    private readonly Player _cat;
-    private readonly Player _mouse;
-    private readonly PursuitLog _log;
-    private GameState _gameState;
-    private int _fieldSize;
-    private int? _caughtAtCell;
-    private bool _hasRun;
-
-    public Game()
+    enum GameState
     {
-        _cat = new Player("Cat");
-        _mouse = new Player("Mouse");
-        _log = new PursuitLog();
-        _gameState = GameState.Start;
-        _fieldSize = 0;
-        _caughtAtCell = null;
-        _hasRun = false;
+        Start,
+        End
     }
 
-    public GameState State => _gameState;
-
-    public void Run()
+    class Game
     {
-        if (_hasRun)
+        public static string InputFile = "ChaseData.txt";
+        public static string OutFile = "PursuitLog.txt";
+
+        public int size;
+        public Player cat;
+        public Player mouse;
+        public GameState state;
+
+        private StreamWriter writer;
+        private int caughtLocation = -1;
+
+        public Game(int size)
         {
-            throw new InvalidOperationException("Экземпляр Game можно запустить только один раз.");
+            this.size = size;
+            cat = new Player("Cat", size);
+            mouse = new Player("Mouse", size);
+            state = GameState.Start;
         }
 
-        _hasRun = true;
-        string inputFile = InputFile;
-        string outFile = OutFile;
-
-        string[] lines = File.ReadAllLines(inputFile);
-        int firstCommandIndex = ReadFieldSize(lines);
-
-        _log.WriteHeader();
-
-        for (int index = firstCommandIndex; index < lines.Length && _gameState == GameState.Start; index++)
+        public void Run()
         {
-            ExecuteCommand(lines[index], lineNumber: index + 1);
-        }
+            string[] lines = File.ReadAllLines(InputFile);
 
-        Finish(outFile);
-    }
-
-    private int ReadFieldSize(string[] lines)
-    {
-        for (int index = 0; index < lines.Length; index++)
-        {
-            string trimmed = lines[index].Trim();
-            if (trimmed.Length == 0)
+            if (lines.Length > 0 && int.TryParse(lines[0].Trim(), out int fileSize))
             {
-                continue;
+                this.size = fileSize;
+                cat = new Player("Cat", size);
+                mouse = new Player("Mouse", size);
             }
 
-            if (!int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out int size)
-                || size < 1
-                || size > MaxFieldSize)
+            using (writer = new StreamWriter(OutFile))
             {
-                throw new InvalidDataException(
-                    $"Строка {index + 1}: размер поля должен быть целым числом от 1 до {MaxFieldSize}, получено '{trimmed}'.");
+                WriteHeader();
+
+                int lineIndex = 1;
+                while (state != GameState.End)
+                {
+                    if (lineIndex >= lines.Length)
+                    {
+                        state = GameState.End;
+                        break;
+                    }
+
+                    string line = lines[lineIndex].Trim();
+                    lineIndex++;
+
+                    if (string.IsNullOrEmpty(line))
+                    {
+                        continue;
+                    }
+
+                    string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    char command = parts[0][0];
+
+                    if (command == 'P')
+                    {
+                        DoPrintCommand();
+                    }
+                    else if (command == 'M' || command == 'C')
+                    {
+                        int steps = int.Parse(parts[1]);
+                        DoMoveCommand(command, steps);
+
+                        if (cat.state == State.Playing && mouse.state == State.Playing && cat.location == mouse.location)
+                        {
+                            caughtLocation = mouse.location;
+                            cat.state = State.Winner;
+                            mouse.state = State.Looser;
+                            state = GameState.End;
+                        }
+                    }
+                }
+
+                if (caughtLocation == -1)
+                {
+                    mouse.state = State.Winner;
+                    cat.state = State.Looser;
+                }
+
+                WriteFooter();
             }
-
-            _fieldSize = size;
-            return index + 1;
         }
 
-        throw new InvalidDataException("Входной файл пуст: не указан размер поля.");
-    }
-
-    private void ExecuteCommand(string line, int lineNumber)
-    {
-        string[] tokens = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length == 0)
-        {
-            return;
-        }
-
-        string command = tokens[0].ToUpperInvariant();
-        try
+        private void DoMoveCommand(char command, int steps)
         {
             switch (command)
             {
-                case MouseCommand:
-                    DoMoveCommand(_mouse, ParseMoveValue(tokens, lineNumber));
+                case 'M':
+                    mouse.Move(steps);
                     break;
-                case CatCommand:
-                    DoMoveCommand(_cat, ParseMoveValue(tokens, lineNumber));
+                case 'C':
+                    cat.Move(steps);
                     break;
-                case PrintCommand:
-                    EnsureTokenCount(tokens, expected: 1, lineNumber);
-                    DoPrintCommand();
-                    break;
-                default:
-                    throw new InvalidDataException($"Строка {lineNumber}: неизвестная команда '{tokens[0]}'.");
             }
         }
-        catch (ArgumentOutOfRangeException ex)
+
+        private void DoPrintCommand()
         {
-            throw new InvalidDataException($"Строка {lineNumber}: {ex.Message}", ex);
-        }
-    }
+            string catPos = cat.state == State.NotInGame ? "??" : cat.location.ToString();
+            string mousePos = mouse.state == State.NotInGame ? "??" : mouse.location.ToString();
 
-    private void DoMoveCommand(Player player, int value)
-    {
-        player.Move(value, _fieldSize);
-
-        if (IsMouseCaught())
-        {
-            _caughtAtCell = _mouse.Position;
-            _cat.Win();
-            _mouse.Lose();
-            _gameState = GameState.End;
-        }
-    }
-
-    private void DoPrintCommand()
-    {
-        _log.WriteRow(GetPositionOrNull(_cat), GetPositionOrNull(_mouse), GetDistance());
-    }
-
-    private bool IsMouseCaught() =>
-        _cat.State == State.Playing
-        && _mouse.State == State.Playing
-        && _cat.Position == _mouse.Position;
-    private int? GetDistance() =>
-        _cat.HasPosition && _mouse.HasPosition
-            ? Math.Abs(_cat.Position - _mouse.Position)
-            : null;
-
-    private static int? GetPositionOrNull(Player player) =>
-        player.HasPosition ? player.Position : null;
-
-    private void Finish(string outFile)
-    {
-        if (_gameState == GameState.Start)
-        {
-            _mouse.Win();
-            _cat.Lose();
-            _gameState = GameState.End;
+            if (cat.state != State.NotInGame && mouse.state != State.NotInGame)
+            {
+                int distance = GetDistance();
+                string row = $"{catPos,3}{mousePos,6}{distance,10}";
+                writer.WriteLine(row);
+                Console.WriteLine(row);
+            }
+            else
+            {
+                string row = $"{catPos,3}{mousePos,6}";
+                writer.WriteLine(row);
+                Console.WriteLine(row);
+            }
         }
 
-        _log.WriteFooter(_mouse.DistanceTraveled, _cat.DistanceTraveled, _caughtAtCell);
-
-        string report = _log.ToString();
-        File.WriteAllText(outFile, report, OutputEncoding);
-        Console.Write(report);
-    }
-
-    private static int ParseMoveValue(string[] tokens, int lineNumber)
-    {
-        EnsureTokenCount(tokens, expected: 2, lineNumber);
-
-        if (!int.TryParse(tokens[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+        private int GetDistance()
         {
-            throw new InvalidDataException($"Строка {lineNumber}: '{tokens[1]}' не является целым числом.");
+            return Math.Abs(cat.location - mouse.location);
         }
 
-        return value;
-    }
-
-    private static void EnsureTokenCount(string[] tokens, int expected, int lineNumber)
-    {
-        if (tokens.Length != expected)
+        private void WriteHeader()
         {
-            throw new InvalidDataException(
-                $"Строка {lineNumber}: команда '{tokens[0]}' ожидает {expected - 1} аргумент(ов), получено {tokens.Length - 1}.");
+            PrintLine("Cat and Mouse");
+            PrintLine("");
+            PrintLine("Cat Mouse  Distance");
+            PrintLine("-------------------");
+        }
+
+        private void WriteFooter()
+        {
+            PrintLine("-------------------");
+            PrintLine("");
+            PrintLine("");
+            PrintLine("Distance traveled:   Mouse    Cat");
+            PrintLine($"{mouse.distanceTraveled,26}{cat.distanceTraveled,7}");
+            PrintLine("");
+
+            if (caughtLocation != -1)
+            {
+                PrintLine($"Mouse caught at: {caughtLocation,2}");
+            }
+            else
+            {
+                PrintLine("Mouse evaded Cat");
+            }
+        }
+
+        private void PrintLine(string text)
+        {
+            writer.WriteLine(text);
+            Console.WriteLine(text);
         }
     }
 }
